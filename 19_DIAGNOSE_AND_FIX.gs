@@ -27,7 +27,7 @@ function EMI_DIAGNOSE_masterNow() {
 
    // CV_RAW camps “raspables”
    info.cvraw_nonempty = EMI_DIAGNOSE_nonEmptyCounts_(ss, 'CV_RAW', [
-      'sector_objectiu','cv_competencies','cv_experiencia','cv_formacio','cv_text_index','raw_json'
+      'cv_sector_objectiu','cv_competencies','cv_experiencia','cv_formacio','cv_text_index','raw_json'
    ]);
 
    // PERSONES tags_auto?
@@ -42,21 +42,6 @@ function EMI_DIAGNOSE_masterNow() {
       '- Punts típics: VACANTS.text_index, ESCO present, CV_RAW buit.\n'
    );
 }
-
-function EMI_PIPELINE_rebuildBrainNow(topN) {
-   topN = Number(topN || 25);
-
-   withLock_('PIPELINE_REBUILD', () => {
-      EMI_FIX_ensureVacantsTextIndex_();
-      if (typeof EMI_reindexAllNow === 'function') EMI_reindexAllNow();
-      if (typeof EMI_recomputeMatchesBothSidesNow === 'function') EMI_recomputeMatchesBothSidesNow(topN);
-   });
-
-   EMI_LOG_('INFO','PIPELINE_REBUILD_OK','Reindex + Match (2 sentits) fet', { topN });
-}
-
-
-function EMI_PIPELINE_rebuildBrainNow_25() { return EMI_PIPELINE_rebuildBrainNow(25); }
 
 function EMI_TEST_escoConnectionNow() {
    // Test molt simple: si això falla, el “harvest web” no podrà funcionar.

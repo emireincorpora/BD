@@ -51,6 +51,7 @@ function EMI_TRIGGERS_removeCommonLoopersNow() {
       'EMI_recomputeVacantMatchesNow',
       'EMI_recomputeVacantMatches',
       'EMI_recomputeMatchesNow',
+      'EMI_PIPELINE_runNext',
       'EMI_cron_5m',
       'EMI_cron5m_V2',
       'EMI_cron_5m_V2'

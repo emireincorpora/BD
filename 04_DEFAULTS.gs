@@ -117,6 +117,13 @@ function ensureCatalogDefaults_() {
    add_('TAG_EMPRESA','BPF','Bones pràctiques','responsabilitat social|inclusió|diversitat|igualtat|rsc', 10);
    add_('TAG_EMPRESA','NEEDS','Necessitats','vacants|contractació|formació plantilla|pràctiques|duals', 20);
 
+   // MATCH_CFG (pesos i paràmetres del motor de matching)
+   add_('MATCH_CFG','KW_WEIGHT','0.6','Pes keywords', 1);
+   add_('MATCH_CFG','TAG_WEIGHT','0.4','Pes tags', 2);
+   add_('MATCH_CFG','BONUS_CARNET','0.15','Bonus tokens carnet_*', 3);
+   add_('MATCH_CFG','TOP_KW','8','Top keywords a reasons', 4);
+   add_('MATCH_CFG','TOP_TAGS','8','Top tags a reasons', 5);
+
    if (!rows.length) {
       log_('INFO','DEFAULT_CATALEGS_SKIP','CATALEGS ja tenia dades (no seed)', {});
       return;
