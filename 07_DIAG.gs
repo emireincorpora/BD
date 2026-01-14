@@ -85,7 +85,7 @@ function EMI_DIAG_auditInputs_V7() {
 
       auditSheet_(SHEETS.PERSONES, [
          'id_persona','emi_id_persona','nom','cognom1','email','telefon_mobil',
-         'municipi','situacio_laboral_actual','sector_objectiu',
+         'municipi','situacio_laboral_actual','cv_sector_objectiu',
          'tags_persona','tags_persona_auto','tags_auto','text_index','cv_text_index',
          'cv_experiencia','cv_formacio','cv_idiomes','carnet_conduir','vehicle_propi'
       ]);

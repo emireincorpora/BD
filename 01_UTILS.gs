@@ -50,7 +50,7 @@ function getMasterSs_() {
       return ss;
    }
 
-   const id = getProp_(PROP_KEYS.MASTER_SS_ID);
+   const id = getProp_(PROP_KEYS.MASTER_SS_ID) || (typeof EMI_MASTER_SS_ID_DEFAULT !== 'undefined' ? EMI_MASTER_SS_ID_DEFAULT : '');
    if (id) return SpreadsheetApp.openById(id);
 
    throw new Error("No hi ha Spreadsheet actiu. Obre el MASTER i executa des del Sheets.");

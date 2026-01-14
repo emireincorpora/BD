@@ -88,11 +88,37 @@ function moveFileToFolder_(fileId, folder) {
 
 /**
  * Ensure critical columns exist (via HEADERS) and backfill alias columns so AppSheet and scripts stay consistent.
- * - PERSONES: ensures 'sector_objectiu' exists (no backfill)
+ * - PERSONES: backfill 'cv_sector_objectiu' from legacy 'sector_objectiu' if needed
  * - VACANTS: keeps 'id_empresa' and 'empresa_id' synchronized (backfill missing values in either direction)
  */
 function ensureCriticalHeadersAndAliases_(ss) {
    try {
+      // PERSONES legacy alias: sector_objectiu -> cv_sector_objectiu
+      const shP = ss.getSheetByName(SHEETS.PERSONES);
+      if (shP && shP.getLastRow() >= 2) {
+         const hmP = headerMap_(shP);
+         const colLegacy = hmP['sector_objectiu'];
+         const colCv = hmP['cv_sector_objectiu'];
+         if (colLegacy && colCv) {
+            const n = shP.getLastRow() - 1;
+            const legacy = shP.getRange(2, colLegacy, n, 1).getValues();
+            const cv = shP.getRange(2, colCv, n, 1).getValues();
+            let changed = 0;
+            for (let i = 0; i < n; i++) {
+               const legacyVal = String(legacy[i][0] || '').trim();
+               const cvVal = String(cv[i][0] || '').trim();
+               if (!cvVal && legacyVal) {
+                  cv[i][0] = legacyVal;
+                  changed++;
+               }
+            }
+            if (changed) {
+               shP.getRange(2, colCv, n, 1).setValues(cv);
+               log_('INFO', 'ALIAS_BACKFILL_OK', 'Backfill alias columns (PERSONES)', { changed, from: 'sector_objectiu', to: 'cv_sector_objectiu' });
+            }
+         }
+      }
+
       // VACANTS alias sync: id_empresa <-> empresa_id
       const sh = ss.getSheetByName(SHEETS.VACANTS);
       if (sh && sh.getLastRow() >= 2) {

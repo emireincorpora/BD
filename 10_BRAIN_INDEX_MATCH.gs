@@ -460,6 +460,7 @@ function EMI_recomputeVacantMatchesNow(topN) {
       ensureBrainColumns_(ss);
 
       const dict = buildBrainDictionaries_();
+      const cfg = readMatchConfig_(dict.catalogs);
 
       // 1) carrega persones
       const persones = loadEntitiesForMatch_(ss, SHEETS.PERSONES, 'id_persona', dict, buildPersonaBaseText_);
@@ -476,7 +477,7 @@ function EMI_recomputeVacantMatchesNow(topN) {
          const scored = [];
 
          persones.forEach(p => {
-            const scoreObj = scoreMatch_(v, p);
+            const scoreObj = scoreMatch_(v, p, cfg, dict.catalogs);
             if (scoreObj.score <= 0) return;
             scored.push({ p, ...scoreObj });
          });
@@ -502,7 +503,7 @@ function EMI_recomputeVacantMatchesNow(topN) {
       if (outRows.length) sh.getRange(2,1,outRows.length,8).setValues(outRows);
 
       SpreadsheetApp.flush();
-      log_('INFO','MATCH_ALL_OK','Matching complet OK', { vacants: vacants.length, persones: persones.length, rows: outRows.length });
+      log_('INFO','MATCH_ALL_OK','Matching complet OK', { vacants: vacants.length, persones: persones.length, rows: outRows.length, cfg });
    });
 }
 
@@ -589,7 +590,8 @@ function parseTags_(s) {
       .filter(Boolean);
 }
 
-function scoreMatch_(vac, per) {
+function scoreMatch_(vac, per, cfg, catalogs) {
+   const cfgSafe = cfg || { kwWeight: 0.6, tagWeight: 0.4, bonusCarnet: 0, topKw: 8, topTags: 8, bonusTokens: {} };
    const kwHits = intersectCount_(vac.kw, per.kw);
    const denomKw = Math.sqrt(Math.max(1, vac.kw.size) * Math.max(1, per.kw.size));
    const kwScore = denomKw ? (kwHits / denomKw) : 0;
@@ -619,10 +621,15 @@ function scoreMatch_(vac, per) {
       tagScore = Math.min(1, tagHits / 5);
    }
 
-   // tags tenen una mica més de pes que abans (però sense inflar scores)
-   const score = (0.60 * kwScore) + (0.40 * tagScore);
+   const kwWeight = Number(cfgSafe.kwWeight || 0);
+   const tagWeight = Number(cfgSafe.tagWeight || 0);
+   const denom = Math.max(0.0001, kwWeight + tagWeight);
+   let score = ((kwWeight * kwScore) + (tagWeight * tagScore)) / denom;
 
-   const reasons = buildReasons_(vac, per, 8);
+   const bonus = computeSpecialBonus_(vac, per, cfgSafe);
+   score = Math.min(1, score + bonus);
+
+   const reasons = buildReasons_(vac, per, catalogs, cfgSafe);
 
    return {
       score: Number(score.toFixed(4)),
@@ -638,7 +645,10 @@ function intersectCount_(a, b) {
    return c;
 }
 
-function buildReasons_(vac, per, maxItems) {
+function buildReasons_(vac, per, catalogs, cfg) {
+   const cfgSafe = cfg || { topKw: 8, topTags: 8 };
+   const maxKw = Math.max(1, Number(cfgSafe.topKw || 8));
+   const maxTags = Math.max(1, Number(cfgSafe.topTags || 8));
    const kwCommon = [];
    vac.kw.forEach(x => { if (per.kw.has(x) && x.length >= 3) kwCommon.push(x); });
 
@@ -648,12 +658,103 @@ function buildReasons_(vac, per, maxItems) {
    kwCommon.sort();
    tagCommon.sort();
 
-   const kwTop = kwCommon.slice(0, maxItems).join(', ');
-   const tagTop = tagCommon.slice(0, maxItems).join(', ');
+   const kwTop = kwCommon.slice(0, maxKw).join(', ');
+   const tagTop = tagCommonToLabels_(tagCommon, catalogs, maxTags).join(', ');
+   const specialTop = intersectSpecialTokens_(vac.kw, per.kw, cfgSafe).join(', ');
 
    return {
-      text: `KW: ${kwTop} | TAGS: ${tagTop}`.trim(),
+      text: `KW: ${kwTop} | TAGS: ${tagTop}` + (specialTop ? ` | SPECIAL: ${specialTop}` : ''),
       kw_hits: kwCommon.length,
       tag_hits: tagCommon.length
    };
+}
+
+function tagCommonToLabels_(tagCommon, catalogs, maxItems) {
+   const out = [];
+   const seen = new Set();
+   (tagCommon || []).forEach(t => {
+      const m = String(t || '').match(/^([^:]+):(.+)$/);
+      if (!m) return;
+      const tipus = m[1].trim();
+      const codi = m[2].trim();
+      const key = tipus + '||' + codi;
+      const entry = catalogs && catalogs[key];
+      const label = entry && entry.valor ? String(entry.valor).trim() : codi;
+      if (!label) return;
+      const norm = normalizeToken_(label);
+      if (seen.has(norm)) return;
+      seen.add(norm);
+      out.push(label);
+   });
+   out.sort();
+   return out.slice(0, maxItems || 8);
+}
+
+function readMatchConfig_(catalogs) {
+   const cfg = {
+      kwWeight: 0.6,
+      tagWeight: 0.4,
+      bonusCarnet: 0.15,
+      topKw: 8,
+      topTags: 8,
+      bonusTokens: {}
+   };
+   if (!catalogs) return cfg;
+
+   Object.keys(catalogs).forEach(k => {
+      const entry = catalogs[k];
+      if (!entry || entry.tipus !== 'MATCH_CFG') return;
+      const code = String(entry.codi || '').trim().toUpperCase();
+      const raw = String(entry.valor || '').trim();
+      if (!code) return;
+
+      const num = parseFloat(raw.replace(',', '.'));
+      if (code === 'KW_WEIGHT' && isFinite(num)) cfg.kwWeight = Math.max(0, num);
+      if (code === 'TAG_WEIGHT' && isFinite(num)) cfg.tagWeight = Math.max(0, num);
+      if (code === 'BONUS_CARNET' && isFinite(num)) cfg.bonusCarnet = Math.max(0, num);
+      if (code === 'TOP_KW' && isFinite(num)) cfg.topKw = Math.max(1, Math.round(num));
+      if (code === 'TOP_TAGS' && isFinite(num)) cfg.topTags = Math.max(1, Math.round(num));
+
+      if (code === 'BONUS_TOKENS' && raw) {
+         raw.split(/[;,\n]+/).forEach(part => {
+            const [tokRaw, wRaw] = part.split('=').map(s => String(s || '').trim());
+            const tok = normalizeToken_(tokRaw);
+            const w = parseFloat(String(wRaw || '').replace(',', '.'));
+            if (!tok || !isFinite(w)) return;
+            cfg.bonusTokens[tok] = Math.max(0, w);
+         });
+      }
+   });
+
+   return cfg;
+}
+
+function intersectSpecialTokens_(kwA, kwB, cfg) {
+   const cfgSafe = cfg || {};
+   const out = [];
+   kwA.forEach(t => {
+      if (!kwB.has(t)) return;
+      if (t.indexOf('carnet_') === 0) out.push(t);
+      if (cfgSafe.bonusTokens && cfgSafe.bonusTokens[t]) out.push(t);
+   });
+   return Array.from(new Set(out)).sort();
+}
+
+function computeSpecialBonus_(vac, per, cfg) {
+   const cfgSafe = cfg || {};
+   let bonus = 0;
+   const specials = intersectSpecialTokens_(vac.kw, per.kw, cfgSafe);
+   if (!specials.length) return 0;
+
+   const hasCarnet = specials.some(t => t.indexOf('carnet_') === 0);
+   if (hasCarnet) bonus += Number(cfgSafe.bonusCarnet || 0);
+
+   if (cfgSafe.bonusTokens) {
+      specials.forEach(t => {
+         const w = Number(cfgSafe.bonusTokens[t] || 0);
+         if (w > 0) bonus += w;
+      });
+   }
+
+   return Math.max(0, bonus);
 }

@@ -151,6 +151,9 @@ function EMI_installTriggers_V3() {
       try { ss = SpreadsheetApp.getActiveSpreadsheet(); } catch (_) { ss = null; }
       if (!ss) ss = getMasterSs_();
 
+      // Tallafocs per eliminar triggers que poden generar bucles
+      try { if (typeof EMI_TRIGGERS_removeCommonLoopersNow === 'function') EMI_TRIGGERS_removeCommonLoopersNow(); } catch (_) {}
+
       // 1) Elimina triggers d’aquests handlers per evitar duplicats i bucles antics
       var handlers = [
          'EMI_onOpen_V2','EMI_onEdit_V2',
@@ -158,6 +161,7 @@ function EMI_installTriggers_V3() {
          'EMI_DICT_runHarvestBatch',
          'EMI_MASTER_trimGhostColumnsNow',
          'EMI_PIPELINE_rebuildBrainNow_25',
+         'EMI_PIPELINE_runNext',
          // per si ha quedat algun trigger “dels vells”
          'EMI_recomputeMatchesBothSidesNow',
          'EMI_recomputeMatchesNow',
